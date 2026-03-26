@@ -12,7 +12,7 @@
 현장에 설치되는 엣지 게이트웨이(CMG)와 EXSAVER 메인 서버 간의 MQTT 비동기 통신 및 제어/수집 규격서입니다.
 하드웨어(LCU/RTU) 펌웨어 개발자 및 플랫폼 백엔드 연동 담당자를 위한 문서입니다.
 
-- 👉 **[CMG 연동 규격서 통합 안내서(Index) 바로가기](cmg_integration/index.md)**
+- 👉 **[CMG 연동 규격서 통합 안내서(Index) 바로가기](cmg_integration/README.md)**
   - **Part 1.** 시스템 아키텍처 및 네트워크 규약
   - **Part 2.** 데이터 전송 및 제어 페이로드 명세서
   - **Part 3.** 장애 대응 및 데이터 무결성 정책
@@ -24,7 +24,7 @@
 EXSAVER 2.0 플랫폼의 전력 데이터와 제어 기능을 외부 시스템(BEMS, 서드파티 서비스 등)에서 활용하기 위한 RESTful API 연동 규격서입니다.
 웹 프론트엔드 개발자 및 외부 시스템 연동 담당자를 위한 문서입니다.
 
-- 👉 **[OpenAPI 연동 규격서 메인 바로가기](openapi_integration/index.md)**
+- 👉 **[OpenAPI 연동 규격서 메인 바로가기](openapi_integration/README.md)**
 
 <br>
 

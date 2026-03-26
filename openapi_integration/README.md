@@ -4,6 +4,8 @@
 **작성일**: 2026-03-10<br>
 **대상**: EXSAVER 2.0 플랫폼과 연동하려는 3rd-party 시스템 개발자 (스마트 시티, 타사 BEMS 등)
 
+[⬅️ EXSAVER 2.0 통합 기술 문서 홈으로 돌아가기](../README.md)
+
 ## 1. 연동 아키텍처 개요 (Northbound API)
 
 EXSAVER 2.0은 대규모 트래픽 및 실시간 연동을 지원하기 위해 업계 표준인 RESTful API와 WebSocket(또는 SSE)을 혼합 제공합니다. 모든 실시간 조회 요청은 메인 DB가 아닌 **초고속 Redis In-memory Cache**를 통해 반환되므로, 1초 단위의 잦은 폴링(Polling)에도 안정적인 성능을 보장합니다.

@@ -2,7 +2,7 @@
 
 **문서 버전**: v1.0.0-draft.11
 
-[⬅️ 통합 안내서 및 변경 이력으로 돌아가기](index.md)
+[⬅️ 통합 안내서 및 변경 이력으로 돌아가기](README.md)
 
 ## 1. 장애 대응 및 데이터 무결성 보장 정책 (Fault Handling & Data Integrity)
 
