@@ -183,3 +183,8 @@ stateDiagram-v2
    ```
 
 2. **결과**: 수신한 CMG는 NMK를 업데이트하고 사설망에 합류하여 하위 기기 제어를 복원합니다.
+
+3. **⚠️ [중요] 토픽 경로 동적 변경 (Dynamic Topic Routing)**:
+   - 기기 교체로 인해 CMG의 MAC 주소(`cmg_id`)가 변경되었으므로, 네트워크 복구(NMK 주입)가 완료된 즉시 하위 LCU들은 데이터를 전송하는 목적지 토픽을 변경해야 합니다.
+   - **변경 전**: `exsaver/cmg/{구형_cmg_id}/lcu/{lcu_id}/data`
+   - **변경 후**: `exsaver/cmg/{신규_cmg_id}/lcu/{lcu_id}/data`
