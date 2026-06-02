@@ -5,30 +5,36 @@
 
 목적에 맞는 연동 파트 문서를 아래에서 선택해 주세요.
 
----
-
 ## 🔌 1. CMG (Edge Gateway) 연동 규격서
 
 현장에 설치되는 엣지 게이트웨이(CMG)와 EXSAVER 메인 서버 간의 MQTT 비동기 통신 및 제어/수집 규격서입니다.
 하드웨어(LCU/RTU) 펌웨어 개발자 및 플랫폼 백엔드 연동 담당자를 위한 문서입니다.
 
-- 👉 **[CMG 연동 규격서 통합 안내서(Index) 바로가기](cmg_integration/README.md)**
+- 👉 [**CMG 연동 규격서 통합 안내서(Index) 바로가기**](cmg_integration/README.md)
   - **Part 1.** 시스템 아키텍처 및 네트워크 규약
   - **Part 2.** 데이터 전송 및 제어 페이로드 명세서
   - **Part 3.** 장애 대응 및 데이터 무결성 정책
-
-<br>
 
 ## 🌐 2. OpenAPI 연동 규격서
 
 EXSAVER 2.0 플랫폼의 전력 데이터와 제어 기능을 외부 시스템(BEMS, 서드파티 서비스 등)에서 활용하기 위한 RESTful API 연동 규격서입니다.
 웹 프론트엔드 개발자 및 외부 시스템 연동 담당자를 위한 문서입니다.
 
-- 👉 **[OpenAPI 연동 규격서 메인 바로가기](openapi_integration/README.md)**
+- 👉 [**OpenAPI 연동 규격서 메인 바로가기**](openapi_integration/README.md)
 
-<br>
+## 🕹️ 3. RTU Design Simulator (웹 시뮬레이터)
 
----
+현장 장치(RTU)의 디자인 및 동작 구성을 웹상에서 직접 테스트하고 검증해 볼 수 있는 인터랙티브 시뮬레이터 환경을 제공합니다.
+
+- 👉 [**RTU 시뮬레이터 가이드 문서 바로가기**](rtu_simulator/README.md)
+- 🔗 [**웹 시뮬레이터 실행하기 (Interactive Demo)**](https://soarchma.github.io/exsaver2_wiki/rtu_simulator/exsaver_rtu_design_simulator.html)
+
+## 📐 4. CAD 도면 및 설계 가이드라인
+
+현장 하드웨어 설치, 패널 구성 및 설계를 위한 CAD 도면 작성 가이드라인과 관련 기술 문서입니다.
+도면 설계 및 시운전 담당자를 위한 문서입니다.
+
+- 👉 [**CAD 가이드라인 메인 바로가기**](cad_guideline/README.md)
 
 > 💡 **문서 유지보수 안내**
 > 본 위키 페이지는 개발 저장소의 `_docs/specs/` 디렉토리와 CI/CD 파이프라인을 통해 **자동으로 동기화**됩니다. 문서 수정이 필요한 경우 직접 위키를 수정하지 마시고, Private 저장소의 마크다운 파일을 수정하여 Push 해 주시기 바랍니다.
