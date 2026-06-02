@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>exsaver RTU 128x64 LCD Redesign Master</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Inter:wght@300;400;600;700&family=Noto+Sans+KR:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', 'Noto Sans KR', sans-serif; background-color: #f0f4f8; }
+        
+        /* Simulated 128x64 Dot Matrix Screen Style */
+        .pixel-screen { 
+            font-family: 'Courier Prime', monospace; 
+            width: 256px; 
+            height: 128px; 
+            box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.5); 
+            transition: all 0.3s ease; 
+            position: relative; 
+            overflow: hidden; 
+        }
+        
+        /* Real LCD Scanline Grid Overlay for absolute physical fidelity */
+        .pixel-screen::after { 
+            content: " "; 
+            display: block; 
+            position: absolute; 
+            top: 0; left: 0; bottom: 0; right: 0; 
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), linear-gradient(90deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.05)); 
+            z-index: 10; 
+            background-size: 100% 2px, 2px 100%; 
+            pointer-events: none; 
+            opacity: 0.8; 
+            transition: opacity 0.3s ease;
+        }
+        
+        .backlight-blue { --lcd-bg: #1a3a6c; --lcd-fg: #a8d5ff; background-color: var(--lcd-bg) !important; color: var(--lcd-fg) !important; text-shadow: 0 0 2px rgba(168, 213, 255, 0.6); }
+        .backlight-white { --lcd-bg: #e2e8f0; --lcd-fg: #1e293b; background-color: var(--lcd-bg) !important; color: var(--lcd-fg) !important; text-shadow: 0 0 1px rgba(30, 41, 59, 0.3); }
+        .backlight-green { --lcd-bg: #0b2e1b; --lcd-fg: #5eff8b; background-color: var(--lcd-bg) !important; color: var(--lcd-fg) !important; text-shadow: 0 0 2px rgba(94, 255, 139, 0.6); }
+        .backlight-amber { --lcd-bg: #2b1a03; --lcd-fg: #ffb03a; background-color: var(--lcd-bg) !important; color: var(--lcd-fg) !important; text-shadow: 0 0 2px rgba(255, 176, 58, 0.6); }
+
+        .selected-item { background-color: var(--lcd-fg) !important; color: var(--lcd-bg) !important; text-shadow: none !important; }
+        
+        /* Complete Power Saving - Completely dead LCD panel with zero light leak */
+        #lcd-screen.backlight-off { 
+            background-color: #030508 !important; 
+            color: transparent !important; 
+            box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.95) !important;
+            text-shadow: none !important;
+        }
+        #lcd-screen.backlight-off::after { 
+            opacity: 0 !important; /* Hide scanline overlay completely on power save */
+        }
+        #lcd-screen.backlight-off * { 
+            color: transparent !important; 
+            border-color: transparent !important; 
+            background-color: transparent !important; 
+            text-shadow: none !important;
+        }
+        
+        .rtu-key { background: linear-gradient(180deg, #ffffff 0%, #e9ecef 100%); border: 1px solid #ced4da; box-shadow: 0 3px 0 #adb5bd, 0 4px 6px rgba(0,0,0,0.1); transition: all 0.05s ease; user-select: none; }
+        .rtu-key:active { transform: translateY(3px); box-shadow: 0 0 0 #adb5bd, 0 1px 2px rgba(0,0,0,0.15); }
+        .rtu-key-dark { background: linear-gradient(180deg, #495057 0%, #343a40 100%); border: 1px solid #212529; box-shadow: 0 3px 0 #212529, 0 4px 6px rgba(0,0,0,0.2); color: #f8f9fa; }
+        .rtu-key-dark:active { transform: translateY(3px); box-shadow: 0 0 0 #212529, 0 1px 2px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen flex flex-col items-center justify-center">
+
+    <div class="max-w-6xl w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 flex flex-col lg:flex-row">
+        
+        <!-- Left Sidebar: Status & Info -->
+        <div class="w-full lg:w-1/2 p-6 md:p-8 border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/50 flex flex-col justify-between">
+            <div>
+                <div class="flex items-center gap-3 mb-6">
+                    <span class="bg-emerald-500 text-white px-2.5 py-1 rounded-md text-xs font-bold uppercase">Redesign Master</span>
+                    <h1 class="text-xl md:text-2xl font-bold text-slate-800">exsaver RTU UI/UX 시뮬레이터</h1>
+                </div>
+                
+                <div class="space-y-4 text-slate-600 text-sm leading-relaxed mb-6">
+                    <p>● <strong>5. LCU 등록정보확인 개편:</strong> 기존의 수정 제어 방식을 전면 개편하여, LCU ID별 맥주소 및 개별 채널의 SBP(차단 임계값), 지연 시간 등 하드웨어 설정 상태를 안전하게 모니터링할 수 있는 <strong>조회 전용 인터페이스</strong>로 고도화했습니다.</p>
+                    <p>● <strong>메인 화면 전체복구 전용화:</strong> 초기 화면을 오직 전체복구 단일 핫키 및 상태 계측을 위한 메인 콘솔로 완벽하게 미니멀 라이징했습니다.</p>
+                    <p>● <strong>이중 비밀번호 구현 (상호 독립):</strong> 운용자 전용 마스터 비밀번호(9999)와 복구 승인용 사용자 비밀번호(1234)가 완전히 이원화되어 작동합니다.</p>
+                </div>
+
+                <div class="bg-slate-100 p-4 rounded-xl border border-slate-200">
+                    <h3 class="text-xs font-bold text-slate-700 uppercase mb-2">실시간 상태 및 가이드</h3>
+                    <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-slate-500">
+                        <div>· 마스터 비번 (MENU): <strong class="text-blue-600 font-bold" id="current-master-pw-hint">9999</strong></div>
+                        <div>· 사용자 비번 (복구): <strong class="text-indigo-600 font-bold" id="current-user-pw-hint">1234</strong></div>
+                        <div>· 비밀번호 모드: <strong class="text-emerald-600 font-bold" id="pw-mode-hint">사용함</strong></div>
+                        <div>· ALLKEY Lock 상태: <strong class="text-rose-600 font-bold" id="current-allkey-hint">OFF (BOTH)</strong></div>
+                        <div class="col-span-2">· 현재 맥어드레스: <strong class="text-orange-600 font-bold" id="current-mac-hint">RT-7538-A39B-8C12</strong></div>
+                        <div class="col-span-2">· RTU 인포 설정: <strong class="text-pink-600 font-bold" id="current-region-hint">G-Tower 12F</strong></div>
+                        <div>· 시간 동기화 모드: <strong class="text-purple-600 font-bold" id="current-sync-hint">사용함</strong></div>
+                        <div>· 백라이트 대기 시간: <strong class="text-teal-600 font-bold" id="current-backlight-hint">60초</strong></div>
+                        <div>· LCU 온딜레이 설정: <strong class="text-cyan-600 font-bold" id="current-ondelay-hint">180분</strong></div>
+                        <div>· 디렉트 컨트롤 모드: <strong class="text-amber-600 font-bold" id="current-direct-hint">미사용</strong></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Instant Sleep Control for Testing -->
+            <div class="border-t border-slate-200 pt-6">
+                <label class="block text-xs font-semibold text-slate-500 uppercase mb-3">🛠️ 시뮬레이션 디버그 제어</label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button onclick="instantSleep()" class="bg-slate-800 text-white py-2.5 px-4 rounded-xl text-xs font-bold hover:bg-slate-900 transition-all flex items-center justify-center gap-2 shadow-md">
+                        <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                        <span>즉시 절전 (암전)</span>
+                    </button>
+                    <div class="flex gap-1">
+                        <button onclick="changeBacklight('blue')" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-[10px] font-bold shadow-md">Blue</button>
+                        <button onclick="changeBacklight('green')" class="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-[10px] font-bold shadow-md">Green</button>
+                        <button onclick="changeBacklight('amber')" class="flex-1 bg-amber-600 text-white py-2 rounded-lg text-[10px] font-bold shadow-md">Amber</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Interactive Device Mockup -->
+        <div class="w-full lg:w-1/2 p-6 md:p-12 flex flex-col items-center justify-center bg-slate-200/50">
+            
+            <div class="text-center mb-4">
+                <span class="text-xs text-slate-500 font-semibold uppercase tracking-wider">실제 기기 조작 시뮬레이터 (버튼을 직접 누르세요)</span>
+            </div>
+
+            <!-- Simulated Physical Device Casing -->
+            <div id="rtu-casing" class="w-full max-w-[380px] p-8 rounded-[32px] border-4 flex flex-col justify-between transition-all casing-white">
+                
+                <div class="flex justify-between items-start mb-6">
+                    <div class="text-slate-700 select-none">
+                        <h2 class="text-lg font-black tracking-tight leading-none text-slate-800">REMOTE</h2>
+                        <h2 class="text-lg font-black tracking-tight leading-none text-slate-800">TERMINAL</h2>
+                        <p class="text-[9px] text-slate-500 font-bold mt-1.5">스마트 원격 제어장치</p>
+                    </div>
+
+                    <div class="border-4 border-slate-800 rounded bg-slate-900 shadow-inner p-1">
+                        <div id="lcd-screen" class="pixel-screen backlight-blue flex flex-col justify-between text-[11px] p-2 leading-tight overflow-hidden">
+                            <div id="screen-content" class="w-full h-full flex flex-col justify-between"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-4 gap-3 mt-4">
+                    <button onclick="kp('1')" class="rtu-key rounded-xl py-3 text-sm font-bold text-slate-700">1</button>
+                    <button onclick="kp('2')" class="rtu-key rounded-xl py-3 text-sm font-bold text-slate-700">2</button>
+                    <button onclick="kp('3')" class="rtu-key rounded-xl py-3 text-sm font-bold text-slate-700">3</button>
+                    <button onclick="kp('esc')" class="rtu-key rtu-key-dark rounded-xl py-3 text-xs font-semibold">←</button>
+                    <button onclick="kp('4')" class="rtu-key rounded-xl py-3 text-sm font-bold text-slate-700">4</button>
+                    <button onclick="kp('5')" class="rtu-key rounded-xl py-3 text-sm font-bold text-slate-700 border-2 border-emerald-500 flex flex-col items-center justify-center">5</button>
+                    <button onclick="kp('6')" class="rtu-key rounded-xl py-3 text-sm font-bold text-slate-700">6</button>
+                    <button onclick="kp('up')" class="rtu-key rtu-key-dark rounded-xl py-3 text-sm font-bold">▲</button>
+                    <button onclick="kp('7')" class="rtu-key rounded-xl py-3 text-sm font-bold text-slate-700">7</button>
+                    <button onclick="kp('8')" class="rtu-key rounded-xl py-3 text-sm font-bold text-slate-700">8</button>
+                    <button onclick="kp('9')" class="rtu-key rounded-xl py-3 text-sm font-bold text-slate-700">9</button>
+                    <button onclick="kp('down')" class="rtu-key rtu-key-dark rounded-xl py-3 text-sm font-bold">▼</button>
+                    <button onclick="kp('menu')" class="rtu-key rtu-key-dark rounded-xl py-2.5 text-[10px] font-bold flex flex-col items-center justify-center leading-none border-2 border-emerald-400">
+                        <span>● ● ●</span>
+                        <span class="mt-1 font-bold">MENU</span>
+                    </button>
+                    <button onclick="kp('0')" class="rtu-key rounded-xl py-3 text-sm font-bold text-slate-700">0</button>
+                    <button onclick="kp('#')" class="rtu-key rounded-xl py-3 text-[11px] font-bold text-slate-700">#</button>
+                    <button id="physical-enter-key" onclick="kp('enter')" class="rtu-key rtu-key-dark rounded-xl py-3 text-xs font-semibold border-2 border-emerald-500 flex flex-col items-center justify-center">
+                        <span class="leading-none text-emerald-400 font-bold">↵</span>
+                        <span class="text-[9px] leading-none mt-0.5 text-emerald-400 font-bold">ENTER</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interactivity Help Badge -->
+    <div class="mt-6 text-xs text-slate-600 bg-slate-100 px-4 py-3 rounded-xl border border-slate-200 leading-relaxed text-center max-w-[1280px] w-full">
+        🔑 운용자 패스워드는 기본값 <strong class="text-slate-800">9999</strong>이며, 복구용 비번은 <strong class="text-slate-800">1234</strong> 입니다.<br>
+        💡 <strong class="text-emerald-600">ENTER 키 / 0번 키:</strong> 전체 복구 | <strong class="text-emerald-600">MENU 키:</strong> 관리 메뉴<br>
+        ⏱️ <strong class="text-blue-600">백라이트 절전 타이머 (<span id="backlight-max-span">60</span>초):</strong> <span id="backlight-timer-info" class="font-bold text-emerald-600">60초 남음 (켬)</span>
+    </div>
+
+    <!-- Script Block for UI Simulation Logic -->
+    <script>
+        let lcuStates = {}; 
+        let lcuSettings = {}; // LCU별 SBP 및 차단 지연 설정 데이터베이스
+        let lcuMacs = {
+            '001': '000000000001',
+            '002': '000000000002',
+            '012': '000000000012',
+            '020': '000000000020',
+            '030': '000000000030'
+        }; // LCU별 고유 하드웨어 맥어드레스 맵
+        
+        let appState = 'HOME';
+        let redirectTargetState = ''; // PW 완료 후 진입 목적지 분기 저장
+        let inputBuf = '';
+        let selLcu = '001', selUnit = '1';
+        
+        let menuIdx = 0;
+        let configIdx = 0; // RTU 정밀 환경설정 인덱스
+        let deptIdx = 0; // 부서 선택 인덱스
+        let actionIdx = 0; // ON/OFF 선택 인덱스
+        let editIdTableIdx = 0; // 아이디 테이블수정 목록 포커스 인덱스
+        let editIdx = 0; // 유닛 정밀 제어 목록 포커스 인덱스
+        let allKeyIdx = 0; // SET ALLKEY 메뉴 인덱스
+        let recoveryTargetName = '';
+        
+        // 이중 비밀번호 시스템 마스터 파라미터
+        let masterPassword = '9999'; // 관리자 제어 메뉴 진입용
+        let userPassword = '1234';   // 일반 전원 복구 작동 승인용
+        let passwordEnforced = true; // 일반 전원 복구 비밀번호 강제 여부
+        let pwTarget = 'MASTER';     // 비밀번호 검증 컨텍스트
+        
+        // RTU 제어 데이터베이스 파라미터
+        let rtuMacAddress = 'RT-7538-A39B-8C12';
+        let rtuRegionName = 'G-Tower 12F';
+        let timeSyncEnabled = false; // 시간 원격 동기화 상태
+        let onDelayMinutes = 180; // 온딜레이 대기 세팅 분단위
+        let directControlEnabled = false; // 디렉트 컨트롤 모드 상태
+        
+        // ALLKEY LOCK 및 단축 매핑 제어 파라미터
+        let allKeyLock = false; 
+        let allKeyMap = 'BOTH'; 
+
+        // 가상 시스템 시계 조율용 오프셋
+        let timeOffsetHours = 0;
+        let timeOffsetMinutes = 0;
+
+        let isLit = true;
+        let litTimer = null;
+        let countdownInterval = null;
+        let maxBacklightSeconds = 60; // LCD 백라이트 자동 절전 시간 (60초)
+        let secondsRemaining = maxBacklightSeconds;
+
+        // 고객사 전용 5대 관리 부서 데이터셋
+        const depts = [
+            { name: 'LAB', korName: '연구소', ids: ['001'] }, 
+            { name: 'SALES', korName: '영업부', ids: ['002'] },
+            { name: 'MGMT', korName: '관리부', ids: ['012'] }, 
+            { name: 'PURCHASE', korName: '구매부', ids: ['020'] },
+            { name: 'PROD', korName: '생산부', ids: ['030'] }
+        ];
+
+        const getDeptStatusText = (dept) => {
+            let isOff = false;
+            dept.ids.forEach(id => {
+                const paddedId = String(id).padStart(3, '0');
+                for(let ch=1; ch<=6; ch++) {
+                    if((lcuStates[`${paddedId}-${ch}`] || 'ON') === 'OFF') isOff = true;
+                }
+            });
+            return isOff ? '(절전중)' : '(운영중)';
+        };
+
+        const getGlobalOffCount = () => {
+            let count = 0;
+            const mockIds = ['001', '002', '012', '020', '030'];
+            mockIds.forEach(id => {
+                for(let ch=1; ch<=6; ch++) {
+                    if((lcuStates[`${id}-${ch}`] || 'ON') === 'OFF') count++;
+                }
+            });
+            return count;
+        };
+
+        const getSimulatedTime = () => {
+            const now = new Date();
+            let h = now.getHours() + timeOffsetHours;
+            let m = now.getMinutes() + timeOffsetMinutes;
+            
+            h = (h + Math.floor(m / 60)) % 24;
+            m = (m % 60 + 60) % 60;
+            if (h < 0) h += 24;
+            
+            return {
+                hours: String(h).padStart(2, '0'),
+                minutes: String(m).padStart(2, '0')
+            };
+        };
+
+        const updateTimerUi = () => {
+            const timerInfo = document.getElementById('backlight-timer-info');
+            const maxSpan = document.getElementById('backlight-max-span');
+            if (maxSpan) maxSpan.textContent = maxBacklightSeconds;
+            if (timerInfo) {
+                if (isLit) {
+                    timerInfo.className = "font-bold text-emerald-600";
+                    timerInfo.textContent = `${secondsRemaining}초 남음 (켬)`;
+                } else {
+                    timerInfo.className = "font-bold text-red-500";
+                    timerInfo.textContent = `꺼짐 (아무 키나 눌러 깨우기)`;
+                }
+            }
+        };
+
+        // Beep buzzer emulator
+        const playBeep = (freq = 2000, duration = 100) => {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.start();
+                setTimeout(() => { oscillator.stop(); audioCtx.close(); }, duration);
+            } catch(e) {}
+        };
+
+        const render = () => {
+            const scr = document.getElementById('screen-content');
+            const simTime = getSimulatedTime();
+            const time = `${simTime.hours}:${simTime.minutes}`;
+            scr.innerHTML = '';
+
+            // Safe DOM Update Helper to strictly prevent "Cannot set properties of null" crashes
+            const updateText = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = val;
+            };
+
+            // Update sidebar real-time debug info safely
+            updateText('current-master-pw-hint', masterPassword);
+            updateText('current-user-pw-hint', userPassword);
+            updateText('pw-mode-hint', passwordEnforced ? "사용함" : "미사용");
+            updateText('current-mac-hint', rtuMacAddress);
+            updateText('current-region-hint', rtuRegionName);
+            updateText('current-sync-hint', timeSyncEnabled ? "사용함" : "미사용");
+            updateText('current-backlight-hint', `${maxBacklightSeconds}초`);
+            updateText('current-ondelay-hint', `${onDelayMinutes}분`);
+            updateText('current-direct-hint', directControlEnabled ? "사용함" : "미사용");
+            updateText('current-allkey-hint', `${allKeyLock ? 'ON (잠김)' : 'OFF'} [${allKeyMap}]`);
+
+            if (appState === 'HOME') {
+                const offTotal = getGlobalOffCount();
+                const statusText = offTotal > 0 ? '(절전중)' : '(운영중)';
+                scr.innerHTML = `
+                    <div class="flex justify-between items-center text-[8px] border-b border-current pb-0.5 font-bold">
+                        <span>☘ EXSAVER v1</span><span>2026-06-01 ${time}</span>
+                    </div>
+                    <div class="my-3 text-center flex flex-col justify-center items-center h-[55px]">
+                        <p class="text-[12px] font-bold tracking-tight">전체 복구</p>
+                        <p class="text-[10px] font-bold mt-1">${statusText}</p>
+                        <p class="text-[8px] opacity-75 mt-1.5">[ ENTER ] 또는 [ 0 ] 실행</p>
+                    </div>
+                    <div class="flex justify-between text-[7px] font-bold border-t border-current pt-0.5 opacity-90">
+                        <span>MENU:운용자모드</span><span>www.sehong.net</span>
+                    </div>`;
+            } else if (appState === 'PW') {
+                const titleText = (pwTarget === 'MASTER') ? '마스터 비번 입력' : '사용자 비번 입력';
+                const descText = (pwTarget === 'MASTER') ? '마스터 비밀번호를 입력하십시오' : '사용자 비밀번호를 입력하십시오';
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ ${titleText} ]</div>
+                    <div class="text-center h-full flex flex-col justify-center h-[60px]">
+                        <p class="text-[9px] mb-2 opacity-80">${descText}</p>
+                        <p class="text-[12px] tracking-widest">[ ${'*'.repeat(inputBuf.length)}${inputBuf.length < 4 ? '_' : ''} ]</p>
+                    </div>
+                    <div class="text-center text-[7px] border-t border-current pt-0.5 opacity-75">ESC: 취소</div>`;
+            } else if (appState === 'OP_MENU') {
+                // 5번 메뉴 명칭을 LCU 등록정보확인으로 정확하게 치환 완료
+                const items = ["1. LCU 개별 제어", "2. LCU 그룹제어", "3. LCU 전체 제어", "4. LCU 전력 데이터 조회", "5. LCU 등록정보확인", "6. RTU 설정", "7. LCU 정보", "8. 단축키 설정"];
+                let start = Math.max(0, Math.min(items.length - 3, menuIdx - 1));
+                let renderedHtml = `<div class="text-center border-b border-current mb-1">[ OPERATOR MENU ]</div><div class="flex flex-col gap-0.5">`;
+                for (let i = start; i < start + 3; i++) {
+                    if (i < items.length) {
+                        const isSelected = i === menuIdx;
+                        renderedHtml += `<div class="${isSelected ? 'selected-item px-1' : ''}">${items[i]}</div>`;
+                    }
+                }
+                renderedHtml += `</div>
+                    <div class="text-[7px] border-t border-current mt-1.5 pt-0.5 flex justify-between">
+                        <span>▲▼/숫자: 이동</span><span>ENT: 선택 / ESC: 홈</span>
+                    </div>`;
+                scr.innerHTML = renderedHtml;
+            } else if (appState === 'RTU_CONFIG_MENU') {
+                const items = [
+                    "1. 마스터 비번 변경",
+                    "2. 사용자 비번 변경",
+                    `3. 비번 모드: [${passwordEnforced ? '사용' : '미사용'}]`,
+                    "4. 맥어드레스 설정",
+                    "5. RTU 정보 설정",
+                    "6. 시간 설정",
+                    `7. 시간 동기화: [${timeSyncEnabled ? '사용' : '미사용'}]`,
+                    `8. 백라이트 설정: [${maxBacklightSeconds}초]`,
+                    `9. 온딜레이 설정: [${onDelayMinutes}분]`,
+                    `10. 디렉트 컨트롤: [${directControlEnabled ? '사용' : '미사용'}]`
+                ];
+                let start = Math.max(0, Math.min(items.length - 3, configIdx - 1));
+                let renderedHtml = `<div class="text-center border-b border-current mb-1">[ RTU CONFIG ]</div><div class="flex flex-col gap-0.5">`;
+                for (let i = start; i < start + 3; i++) {
+                    if (i < items.length) {
+                        const isSelected = i === configIdx;
+                        renderedHtml += `<div class="${isSelected ? 'selected-item px-1' : ''}">${items[i]}</div>`;
+                    }
+                }
+                renderedHtml += `</div><div class="text-[7px] border-t border-current mt-1.5 pt-0.5 flex justify-between"><span>▲▼: 이동</span><span>ENT: 선택 / ESC: 이전</span></div>`;
+                scr.innerHTML = renderedHtml;
+            } else if (appState === 'CHANGE_MASTER_PW') {
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ 마스터 비번 변경 ]</div>
+                    <div class="text-center h-full flex flex-col justify-center h-[60px]">
+                        <p class="text-[9px] mb-2 opacity-80">신규 마스터 비밀번호 4자리 입력</p>
+                        <p class="text-[12px] tracking-widest">[ ${inputBuf || '____'} ]</p>
+                    </div>
+                    <div class="text-center text-[7px] border-t border-current pt-0.5 opacity-75">ESC: 취소</div>`;
+            } else if (appState === 'CHANGE_USER_PW') {
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ 사용자 비번 변경 ]</div>
+                    <div class="text-center h-full flex flex-col justify-center h-[60px]">
+                        <p class="text-[9px] mb-2 opacity-80">신규 사용자 비밀번호 4자리 입력</p>
+                        <p class="text-[12px] tracking-widest">[ ${inputBuf || '____'} ]</p>
+                    </div>
+                    <div class="text-center text-[7px] border-t border-current pt-0.5 opacity-75">ESC: 취소</div>`;
+            } else if (appState === 'CHANGE_MAC_ADDR') {
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ 맥어드레스 설정 ]</div>
+                    <div class="text-center h-full flex flex-col justify-center h-[60px]">
+                        <p class="text-[8.5px] opacity-80">현재: ${rtuMacAddress}</p>
+                        <p class="text-[9px] mt-1">새 Suffix 입력 (4자리 숫자)</p>
+                        <p class="text-[12px] tracking-widest mt-1">[ ${inputBuf || '____'} ]</p>
+                    </div>
+                    <div class="text-center text-[7px] border-t border-current pt-0.5 opacity-75">ESC: 취소</div>`;
+            } else if (appState === 'CHANGE_RTU_INFO') {
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ RTU 정보 설정 ]</div>
+                    <div class="text-center h-full flex flex-col justify-center h-[60px]">
+                        <p class="text-[8.5px] opacity-80">현재: ${rtuRegionName}</p>
+                        <p class="text-[9px] mt-1">새 층수 입력 (2자리 숫자)</p>
+                        <p class="text-[12px] tracking-widest mt-1">[ G-Tower ${inputBuf || '__'}F ]</p>
+                    </div>
+                    <div class="text-center text-[7px] border-t border-current pt-0.5 opacity-75">ESC: 취소</div>`;
+            } else if (appState === 'CHANGE_TIME') {
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ 시간 설정 ]</div>
+                    <div class="text-center h-full flex flex-col justify-center h-[60px]">
+                        <p class="text-[8.5px] opacity-80">현재 시간: ${simTime.hours}:${simTime.minutes}</p>
+                        <p class="text-[9px] mt-1">새 시간 입력 (HHMM 4자리)</p>
+                        <p class="text-[12px] tracking-widest mt-1">[ ${inputBuf || '____'} ]</p>
+                    </div>
+                    <div class="text-center text-[7px] border-t border-current pt-0.5 opacity-75">ESC: 취소</div>`;
+            } else if (appState === 'CHANGE_ON_DELAY') {
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ 온딜레이 설정 ]</div>
+                    <div class="text-center h-full flex flex-col justify-center h-[60px]">
+                        <p class="text-[8.5px] opacity-80">현재 설정: ${onDelayMinutes} 분</p>
+                        <p class="text-[9px] mt-1">새 대기 시간 입력 (3자리 분 입력)</p>
+                        <p class="text-[12px] tracking-widest mt-1">[ ${inputBuf || '___'}분 ]</p>
+                    </div>
+                    <div class="text-center text-[7px] border-t border-current pt-0.5 opacity-75">ESC: 취소</div>`;
+            } else if (appState === 'CHANGE_PW_SUCCESS') {
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ 설정 변경 완료 ]</div>
+                    <div class="text-center h-full flex flex-col justify-center items-center h-[55px]">
+                        <p class="text-[10px] font-bold">변경 성공</p>
+                        <p class="text-[8px] mt-2 opacity-80 font-bold">설정 데이터 저장 완료</p>
+                    </div>
+                    <div class="text-center text-[7px] border-t border-current pt-0.5 opacity-50">잠시만 기다려 주십시오</div>`;
+            } else if (appState === 'DEPT_SELECT') {
+                let start = Math.max(0, Math.min(depts.length - 3, deptIdx - 1));
+                let renderedHtml = `<div class="text-center border-b border-current mb-1">[ LCU 그룹 선택 ]</div><div class="flex flex-col gap-0.5">`;
+                for (let i = start; i < start + 3; i++) {
+                    if (i < depts.length) {
+                        const isSelected = i === deptIdx;
+                        renderedHtml += `<div class="${isSelected ? 'selected-item px-1' : ''}">${i+1}. ${depts[i].korName}</div>`;
+                    }
+                }
+                renderedHtml += `</div><div class="text-[7px] border-t border-current mt-1.5 pt-0.5 flex justify-between"><span>▲▼/숫자: 이동</span><span>ENT: 선택 / ESC: 이전</span></div>`;
+                scr.innerHTML = renderedHtml;
+            } else if (appState === 'DEPT_ACTION') {
+                const target = depts[deptIdx].korName;
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1">[ ${target} 그룹제어 ]</div>
+                    <div class="flex flex-col gap-1 mt-1 font-bold">
+                        <div class="${actionIdx === 0 ? 'selected-item px-1' : ''}">1. 부서 전체 켜기</div>
+                        <div class="${actionIdx === 1 ? 'selected-item px-1' : ''}">2. 부서 전체 끄기</div>
+                    </div>
+                    <div class="text-[7px] border-t border-current mt-1.5 pt-0.5 flex justify-between">
+                        <span>▲▼: 이동</span><span>ENT: 실행 / ESC: 이전</span>
+                    </div>`;
+            } else if (appState === 'ALL_CONTROL_SELECT') {
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1">[ LCU 전체 제어 ]</div>
+                    <div class="flex flex-col gap-1 mt-1 font-bold">
+                        <div class="${actionIdx === 0 ? 'selected-item px-1' : ''}">1. 전체 LCU 켜기</div>
+                        <div class="${actionIdx === 1 ? 'selected-item px-1' : ''}">2. 전체 LCU 끄기</div>
+                    </div>
+                    <div class="text-[7px] border-t border-current mt-1.5 pt-0.5 flex justify-between">
+                        <span>▲▼: 이동</span><span>ENT: 실행 / ESC: 이전</span>
+                    </div>`;
+            } else if (appState === 'IND_LCU_INPUT') {
+                scr.innerHTML = `<div class="text-center h-full flex flex-col justify-center"><p class="text-[10px] mb-2">[ LCU 개별 제어 ]</p><p class="text-[9px]">LCU ID 입력 (1~999)</p><p class="text-[12px] mt-1">[ ${inputBuf || '___'} ]</p></div>`;
+            } else if (appState === 'IND_CH_INPUT') {
+                scr.innerHTML = `<div class="text-center h-full flex flex-col justify-center"><p class="text-[10px] mb-2">[ LCU: ${selLcu} ]</p><p class="text-[9px]">채널 입력 (1~6)</p><p class="text-[12px] mt-1">[ ${inputBuf || '_'} ]</p></div>`;
+            } else if (appState === 'IND_CONTROL') {
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1">[ LCU:${selLcu} CH:${selUnit} ]</div>
+                    <div class="flex flex-col gap-1 mt-1 font-bold">
+                        <div class="${actionIdx === 0 ? 'selected-item px-1' : ''}">1. 전원 켜기</div>
+                        <div class="${actionIdx === 1 ? 'selected-item px-1' : ''}">2. 전원 끄기</div>
+                    </div>
+                    <div class="text-[7px] border-t border-current mt-1.5 pt-0.5 flex justify-between">
+                        <span>▲▼: 이동</span><span>ENT: 실행 / ESC: 이전</span>
+                    </div>`;
+            } else if (appState === 'SHOW_DATA_INPUT') {
+                scr.innerHTML = `<div class="text-center h-full flex flex-col justify-center"><p class="text-[10px] mb-2">[ LCU 전력 데이터 조회 ]</p><p class="text-[9px]">LCU ID 입력 (1~999)</p><p class="text-[12px] mt-1">[ ${inputBuf || '___'} ]</p></div>`;
+            } else if (appState === 'SHOW_DATA_VIEW') {
+                const key = `${selLcu}-${selUnit}`;
+                const state = lcuStates[key] || 'ON';
+                const sbpValue = lcuSettings[key + '-SBP'] || '15';
+                const sbpSavedWh = lcuSettings[key + '-CUT_WH'] || '342';
+                
+                const voltText = state === 'ON' ? '220.0 V' : '0.0 V';
+                const currText = state === 'ON' ? '0.07 A' : '0.00 A';
+                const wattText = state === 'ON' ? '15.4 W' : '0.0 W';
+                const energyAccumWh = '2158.4 WH';
+
+                scr.innerHTML = `
+                    <div class="flex justify-between items-center text-[9px] font-bold border-b border-current pb-0.5">
+                        <span>[ LCU:${selLcu} 유닛:${selUnit} ]</span>
+                        <span>전력 데이터 조회</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-x-1 my-1.5 text-[6.8px] tracking-tighter leading-tight font-bold">
+                        <div>1.사용전압: ${voltText}</div>
+                        <div>4.사용전력량: ${energyAccumWh}</div>
+                        <div>2.사용전류: ${currText}</div>
+                        <div>5.대기전력차단값: ${sbpValue}W</div>
+                        <div>3.사용전력: ${wattText}</div>
+                        <div>6.대기전력차단량: ${sbpSavedWh}WH</div>
+                    </div>
+                    <div class="border-t border-current text-[7px] pt-0.5 text-center flex justify-between px-1 font-bold">
+                        <span>▲▼: 채널변경</span>
+                        <span>ESC: 이전</span>
+                    </div>`;
+            } else if (appState === 'EDIT_ID_TABLE') {
+                let currentMac = lcuMacs[selLcu] || '000000000000';
+                // 수정 유발 구문 제거 및 완전한 조회 상태 창으로 한글 최적화
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ LCU 등록정보확인 ]</div>
+                    <div class="flex flex-col text-[7.5px] p-0.5 gap-0.5 font-bold text-left">
+                        <div class="${editIdTableIdx === 0 ? 'selected-item px-1' : ''}">1. LCU 번호  : [ ${selLcu} ] (ENT)</div>
+                        <div class="px-1 opacity-70">2. 유닛 수량 : [ 6 개 ]</div>
+                        <div class="px-1 opacity-70">3. 맥 주소  : [ ${currentMac} ]</div>
+                        <div class="${editIdTableIdx === 3 ? 'selected-item px-1' : ''}">4. 세부 정보 확인 (ENT)</div>
+                    </div>
+                    <div class="text-[7px] border-t border-current mt-1 pt-0.5 flex justify-between">
+                        <span>▲▼: 이동 / ENT: 조회</span><span>ESC: 이전</span>
+                    </div>`;
+            } else if (appState === 'EDIT_ID_TABLE_ID_INPUT') {
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ LCU NO 조회 ]</div>
+                    <div class="text-center h-full flex flex-col justify-center h-[60px]">
+                        <p class="text-[9px] mb-2 opacity-80">조회할 LCU ID 입력 (1~999)</p>
+                        <p class="text-[12px] tracking-widest">[ ${inputBuf || '___'} ]</p>
+                    </div>
+                    <div class="text-center text-[7px] border-t border-current pt-0.5 opacity-75">ESC: 취소</div>`;
+            } else if (appState === 'UNIT_EDIT_MAIN') {
+                const key = `${selLcu}-${selUnit}`;
+                const st = lcuStates[key] || 'ON';
+                const sbp = lcuSettings[key + '-SBP'] || '15';
+                const dly = lcuSettings[key + '-DLY'] || '1800';
+                
+                // 불필요한 서브 설정 메뉴들을 걷어내고, 오직 채널을 1~6 키로 전환하며 6대 파라미터 등록 수치를 확인하는 보드
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ LCU 세부 정보 확인 ]</div>
+                    <div class="flex flex-col text-[7.5px] p-0.5 gap-0.5 font-bold text-left">
+                        <div class="selected-item px-1">▶ 조회 채널 : [ ${selUnit} ] 번 (1~6)</div>
+                        <div class="px-1">· 전원 상태 : [ ${st} ]</div>
+                        <div class="px-1">· 차단 임계 : [ ${sbp}W ]</div>
+                        <div class="px-1">· 지연 시간 : [ ${dly}초 ]</div>
+                    </div>
+                    <div class="text-[7px] border-t border-current mt-1 pt-0.5 flex justify-between">
+                        <span>숫자(1-6): 채널 전환</span><span>ESC: 이전</span>
+                    </div>`;
+            } else if (appState === 'LCU_INFO_VIEW') {
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ LCU 정보 조회 ]</div>
+                    <div class="my-1 text-[7.5px] font-bold leading-tight space-y-0.5 text-left pl-1">
+                        <div>총 LCU 수량 : [ 05대 ]</div>
+                        <div>온라인 장치 : [ 05대 ]</div>
+                        <div>오프라인   : [ 00대 ]</div>
+                        <div>통신 성공률 : [ 99.8% ]</div>
+                        <div>펌웨어 버전 : [ LCU-V4.2.1 ]</div>
+                    </div>
+                    <div class="text-[7px] border-t border-current mt-1 pt-0.5 text-center">
+                        ESC: 이전 메뉴
+                    </div>`;
+            } else if (appState === 'SET_ALLKEY_MENU') {
+                scr.innerHTML = `
+                    <div class="text-center border-b border-current mb-1 text-[8.5px] font-bold">[ 단축키 제어 설정 ]</div>
+                    <div class="flex flex-col text-[7.5px] p-1 gap-1 font-bold text-left">
+                        <div class="${allKeyIdx === 0 ? 'selected-item px-1' : ''}">1. 단축키 잠금: [ ${allKeyLock ? '사용' : '미사용'} ]</div>
+                        <div class="${allKeyIdx === 1 ? 'selected-item px-1' : ''}">2. 단축키 맵  : [ ${allKeyMap === 'BOTH' ? '모두' : (allKeyMap === 'ENT' ? '엔터' : '0번')} ]</div>
+                    </div>
+                    <div class="text-[7px] border-t border-current mt-2 pt-0.5 flex justify-between">
+                        <span>▲▼: Move / ENT: Toggle</span><span>ESC: Prev</span>
+                    </div>`;
+            } else if (appState === 'RECOVERY_PROGRESS') {
+                scr.innerHTML = `
+                    <div class="text-center text-[10px] font-bold border-b border-current pb-0.5">
+                        [ ${recoveryTargetName} ]
+                    </div>
+                    <div class="my-2.5 flex flex-col items-center gap-1 justify-center h-[55px]">
+                        <span class="text-[9px] font-bold">명령 전송 중...</span>
+                        <span class="text-[9px] tracking-widest font-bold">■■■■■■■□□□</span>
+                    </div>
+                    <div class="text-center text-[8px] opacity-70 border-t border-current pt-0.5">
+                        잠시만 기다려 주십시오
+                    </div>`;
+            } else if (appState === 'DEPT_RECOVERY_SUCCESS') {
+                scr.innerHTML = `
+                    <div class="text-center text-[10px] font-bold border-b border-current pb-0.5">
+                        [ 제어 완료 ]
+                    </div>
+                    <div class="my-3 flex flex-col items-center justify-center text-center gap-1 h-[55px]">
+                        <span class="text-[10px] font-bold">▶ ${recoveryTargetName}</span>
+                        <span class="text-[8.5px] bg-white/20 px-1.5 py-0.5 rounded font-bold">명령 전송 성공</span>
+                    </div>
+                    <div class="text-center text-[8px] opacity-70 border-t border-current pt-0.5">
+                        이전 화면으로 복귀 중...
+                    </div>`;
+            }
+        };
+
+        // Execution Core for Total / Dept Recovery
+        const executeTotalRecoveryProcess = () => {
+            recoveryTargetName = "전체 복구";
+            appState = 'RECOVERY_PROGRESS'; render();
+            setTimeout(() => { 
+                depts.forEach(d => d.ids.forEach(id => { for(let ch=1; ch<=6; ch++) lcuStates[`${id}-${ch}`] = 'ON'; })); 
+                appState = 'DEPT_RECOVERY_SUCCESS'; render();
+                setTimeout(() => { appState = 'HOME'; render(); }, 1200);
+            }, 1500);
+        };
+
+        const executeDeptRecoveryProcess = (deptIdx) => {
+            const dept = depts[deptIdx];
+            recoveryTargetName = `${dept.korName} 복구`; // Unified to Korean department name
+            appState = 'RECOVERY_PROGRESS'; render();
+            setTimeout(() => { 
+                dept.ids.forEach(id => { 
+                    const paddedId = String(id).padStart(3, '0');
+                    for(let ch=1; ch<=6; ch++) { lcuStates[`${paddedId}-${ch}`] = 'ON'; }
+                }); 
+                appState = 'DEPT_RECOVERY_SUCCESS'; render();
+                setTimeout(() => { appState = 'HOME'; render(); }, 1200);
+            }, 1500);
+        };
+
+        const kp = (k) => {
+            if (!isLit) { 
+                wake(); // Turn on backlight but suppress action (First key press wake-up logic)
+                return; 
+            }
+            wake();
+            if (appState === 'HOME') {
+                // Hotkey mapping triggers for All Recovery (0 or enter)
+                if (k === 'enter' || k === '0') {
+                    if (allKeyMap === 'ENT' && k === '0') return;
+                    if (allKeyMap === '0' && k === 'enter') return;
+
+                    // Verify ALLKEY LOCK status
+                    if (allKeyLock) {
+                        playBeep(800, 300); // Alert buzzer on locked hotkey
+                        return;
+                    }
+
+                    if (passwordEnforced) {
+                        appState = 'PW';
+                        pwTarget = 'USER'; // Request general User Password
+                        inputBuf = '';
+                        redirectTargetState = 'TOTAL_RECOVERY';
+                        render();
+                    } else {
+                        executeTotalRecoveryProcess();
+                    }
+                } else if (k === 'menu') { 
+                    // MENU button verifies Master Password
+                    appState = 'PW'; 
+                    pwTarget = 'MASTER'; 
+                    inputBuf = ''; 
+                    redirectTargetState = 'OP_MENU';
+                    render(); 
+                }
+            } else if (appState === 'PW') {
+                if (k >= '0' && k <= '9' && inputBuf.length < 4) { 
+                    inputBuf += k; 
+                    render();
+                    
+                    if(inputBuf.length === 4) {
+                        setTimeout(() => {
+                            const targetPassword = (pwTarget === 'MASTER') ? masterPassword : userPassword;
+                            if(inputBuf === targetPassword) {
+                                inputBuf = '';
+                                if (redirectTargetState === 'OP_MENU') {
+                                    appState = 'OP_MENU'; 
+                                    menuIdx = 0; 
+                                } else if (redirectTargetState === 'TOTAL_RECOVERY') {
+                                    executeTotalRecoveryProcess();
+                                } else if (redirectTargetState.startsWith('DEPT_RECOVERY_')) {
+                                    const dIdx = parseInt(redirectTargetState.split('_')[2]);
+                                    executeDeptRecoveryProcess(dIdx);
+                                }
+                            } else {
+                                inputBuf = '';
+                                render();
+                            }
+                            render();
+                        }, 200);
+                    }
+                }
+                if (k === 'esc') { appState = 'HOME'; render(); }
+            } else if (appState === 'OP_MENU') {
+                if (k === 'up') menuIdx = (menuIdx - 1 + 8) % 8;
+                if (k === 'down') menuIdx = (menuIdx + 1) % 8;
+                if (k >= '1' && k <= '8') {
+                    const directIdx = parseInt(k) - 1;
+                    menuIdx = directIdx;
+                    if (directIdx === 0) { appState = 'IND_LCU_INPUT'; inputBuf = ''; } 
+                    else if (directIdx === 1) { appState = 'DEPT_SELECT'; deptIdx = 0; } 
+                    else if (directIdx === 2) { appState = 'ALL_CONTROL_SELECT'; actionIdx = 0; }
+                    else if (directIdx === 3) { appState = 'SHOW_DATA_INPUT'; inputBuf = ''; }
+                    else if (directIdx === 4) { appState = 'EDIT_ID_TABLE'; selLcu = '001'; inputBuf = ''; editIdTableIdx = 0; }
+                    else if (directIdx === 5) { appState = 'RTU_CONFIG_MENU'; configIdx = 0; }
+                    else if (directIdx === 6) { appState = 'LCU_INFO_VIEW'; }
+                    else if (directIdx === 7) { appState = 'SET_ALLKEY_MENU'; allKeyIdx = 0; }
+                }
+                if (k === 'enter') { 
+                    if (menuIdx === 0) { appState = 'IND_LCU_INPUT'; inputBuf = ''; } 
+                    else if (menuIdx === 1) { appState = 'DEPT_SELECT'; deptIdx = 0; } 
+                    else if (menuIdx === 2) { appState = 'ALL_CONTROL_SELECT'; actionIdx = 0; }
+                    else if (menuIdx === 3) { appState = 'SHOW_DATA_INPUT'; inputBuf = ''; }
+                    else if (menuIdx === 4) { appState = 'EDIT_ID_TABLE'; selLcu = '001'; inputBuf = ''; editIdTableIdx = 0; }
+                    else if (menuIdx === 5) { appState = 'RTU_CONFIG_MENU'; configIdx = 0; }
+                    else if (menuIdx === 6) { appState = 'LCU_INFO_VIEW'; }
+                    else if (menuIdx === 7) { appState = 'SET_ALLKEY_MENU'; allKeyIdx = 0; }
+                }
+                if (k === 'esc') { appState = 'HOME'; render(); }
+                render();
+            } else if (appState === 'RTU_CONFIG_MENU') {
+                if (k === 'up') configIdx = (configIdx - 1 + 10) % 10;
+                if (k === 'down') configIdx = (configIdx + 1) % 10;
+                if (k === 'enter') {
+                    if (configIdx === 0) {
+                        appState = 'CHANGE_MASTER_PW';
+                        inputBuf = '';
+                    } else if (configIdx === 1) {
+                        appState = 'CHANGE_USER_PW';
+                        inputBuf = '';
+                    } else if (configIdx === 2) {
+                        passwordEnforced = !passwordEnforced;
+                    } else if (configIdx === 3) {
+                        appState = 'CHANGE_MAC_ADDR';
+                        inputBuf = '';
+                    } else if (configIdx === 4) {
+                        appState = 'CHANGE_RTU_INFO';
+                        inputBuf = '';
+                    } else if (configIdx === 5) {
+                        appState = 'CHANGE_TIME';
+                        inputBuf = '';
+                    } else if (configIdx === 6) {
+                        timeSyncEnabled = !timeSyncEnabled;
+                    } else if (configIdx === 7) {
+                        if (maxBacklightSeconds === 10) maxBacklightSeconds = 30;
+                        else if (maxBacklightSeconds === 30) maxBacklightSeconds = 60;
+                        else if (maxBacklightSeconds === 60) maxBacklightSeconds = 120;
+                        else maxBacklightSeconds = 10;
+                        wake();
+                    } else if (configIdx === 8) {
+                        appState = 'CHANGE_ON_DELAY';
+                        inputBuf = '';
+                    } else if (configIdx === 9) {
+                        directControlEnabled = !directControlEnabled;
+                    }
+                }
+                if (k === 'esc') { appState = 'OP_MENU'; }
+                render();
+            } else if (appState === 'CHANGE_MASTER_PW') {
+                if (k >= '0' && k <= '9' && inputBuf.length < 4) {
+                    inputBuf += k;
+                    render();
+                    if (inputBuf.length === 4) {
+                        setTimeout(() => {
+                            masterPassword = inputBuf;
+                            inputBuf = '';
+                            appState = 'CHANGE_PW_SUCCESS';
+                            render();
+                            setTimeout(() => { appState = 'RTU_CONFIG_MENU'; render(); }, 1200);
+                        }, 250);
+                    }
+                }
+                if (k === 'esc') { appState = 'RTU_CONFIG_MENU'; render(); }
+            } else if (appState === 'CHANGE_USER_PW') {
+                if (k >= '0' && k <= '9' && inputBuf.length < 4) {
+                    inputBuf += k;
+                    render();
+                    if (inputBuf.length === 4) {
+                        setTimeout(() => {
+                            userPassword = inputBuf;
+                            inputBuf = '';
+                            appState = 'CHANGE_PW_SUCCESS';
+                            render();
+                            setTimeout(() => { appState = 'RTU_CONFIG_MENU'; render(); }, 1200);
+                        }, 250);
+                    }
+                }
+                if (k === 'esc') { appState = 'RTU_CONFIG_MENU'; render(); }
+            } else if (appState === 'CHANGE_MAC_ADDR') {
+                if (k >= '0' && k <= '9' && inputBuf.length < 4) {
+                    inputBuf += k;
+                    render();
+                    if (inputBuf.length === 4) {
+                        setTimeout(() => {
+                            rtuMacAddress = `RT-7538-A39B-${inputBuf}`;
+                            inputBuf = '';
+                            appState = 'CHANGE_PW_SUCCESS';
+                            render();
+                            setTimeout(() => { appState = 'RTU_CONFIG_MENU'; render(); }, 1200);
+                        }, 250);
+                    }
+                }
+                if (k === 'esc') { appState = 'RTU_CONFIG_MENU'; render(); }
+            } else if (appState === 'CHANGE_RTU_INFO') {
+                if (k >= '0' && k <= '9' && inputBuf.length < 2) {
+                    inputBuf += k;
+                    render();
+                    if (inputBuf.length === 2) {
+                        setTimeout(() => {
+                            rtuRegionName = `G-Tower ${inputBuf}F`;
+                            inputBuf = '';
+                            appState = 'CHANGE_PW_SUCCESS';
+                            render();
+                            setTimeout(() => { appState = 'RTU_CONFIG_MENU'; render(); }, 1200);
+                        }, 250);
+                    }
+                }
+                if (k === 'esc') { appState = 'RTU_CONFIG_MENU'; render(); }
+            } else if (appState === 'CHANGE_TIME') {
+                if (k >= '0' && k <= '9' && inputBuf.length < 4) {
+                    inputBuf += k;
+                    render();
+                    if (inputBuf.length === 4) {
+                        setTimeout(() => {
+                            let hh = parseInt(inputBuf.substring(0, 2));
+                            let mm = parseInt(inputBuf.substring(2, 4));
+                            if (hh < 24 && mm < 60) {
+                                const now = new Date();
+                                timeOffsetHours = hh - now.getHours();
+                                timeOffsetMinutes = mm - now.getMinutes();
+                                inputBuf = '';
+                                appState = 'CHANGE_PW_SUCCESS';
+                                render();
+                                setTimeout(() => { appState = 'RTU_CONFIG_MENU'; render(); }, 1200);
+                            } else {
+                                inputBuf = '';
+                                render();
+                            }
+                        }, 250);
+                    }
+                }
+                if (k === 'esc') { appState = 'RTU_CONFIG_MENU'; render(); }
+            } else if (appState === 'CHANGE_ON_DELAY') {
+                if (k >= '0' && k <= '9' && inputBuf.length < 3) {
+                    inputBuf += k;
+                    render();
+                    if (inputBuf.length === 3) {
+                        setTimeout(() => {
+                            onDelayMinutes = parseInt(inputBuf);
+                            inputBuf = '';
+                            appState = 'CHANGE_PW_SUCCESS';
+                            render();
+                            setTimeout(() => { appState = 'RTU_CONFIG_MENU'; render(); }, 1200);
+                        }, 250);
+                    }
+                }
+                if (k === 'esc') { appState = 'RTU_CONFIG_MENU'; render(); }
+            } else if (appState === 'DEPT_SELECT') {
+                if (k === 'up') deptIdx = (deptIdx - 1 + 5) % 5;
+                if (k === 'down') deptIdx = (deptIdx + 1) % 5;
+                if (k >= '1' && k <= '5') {
+                    deptIdx = parseInt(k) - 1;
+                    appState = 'DEPT_ACTION';
+                    actionIdx = 0;
+                }
+                if (k === 'enter') { appState = 'DEPT_ACTION'; actionIdx = 0; }
+                if (k === 'esc') appState = 'OP_MENU';
+                render();
+            } else if (appState === 'DEPT_ACTION') {
+                if (k === 'up' || k === 'down') actionIdx = actionIdx === 0 ? 1 : 0;
+                if (k === '1') { actionIdx = 0; render(); }
+                if (k === '2') { actionIdx = 1; render(); }
+                if (k === 'enter') {
+                    const targetState = actionIdx === 0 ? 'ON' : 'OFF';
+                    const targetDeptName = depts[deptIdx].korName;
+                    recoveryTargetName = `${targetDeptName} ${targetState === 'ON' ? '켜기' : '끄기'}`;
+                    appState = 'RECOVERY_PROGRESS'; render();
+                    setTimeout(() => {
+                        depts[deptIdx].ids.forEach(id => { for(let ch=1; ch<=6; ch++) lcuStates[`${id}-${ch}`] = targetState; });
+                        appState = 'DEPT_RECOVERY_SUCCESS'; render();
+                        setTimeout(() => { appState = 'OP_MENU'; render(); }, 1200);
+                    }, 1500);
+                }
+                if (k === 'esc') appState = 'DEPT_SELECT';
+                render();
+            } else if (appState === 'EDIT_ID_TABLE') {
+                if (k === 'up') { editIdTableIdx = editIdTableIdx === 0 ? 3 : 0; render(); } // Skip un-editable rows 1 and 2
+                if (k === 'down') { editIdTableIdx = editIdTableIdx === 0 ? 3 : 0; render(); }
+                if (k === 'enter') {
+                    if (editIdTableIdx === 0) { appState = 'EDIT_ID_TABLE_ID_INPUT'; inputBuf = ''; render(); } 
+                    else if (editIdTableIdx === 3) { selUnit = '1'; appState = 'UNIT_EDIT_MAIN'; render(); }
+                } else if (k === 'esc') { appState = 'OP_MENU'; render(); }
+            } else if (appState === 'EDIT_ID_TABLE_ID_INPUT') {
+                if (k >= '0' && k <= '9' && inputBuf.length < 3) { inputBuf += k; render(); }
+                else if (k === 'enter' && inputBuf.length > 0) { selLcu = inputBuf.padStart(3, '0'); inputBuf = ''; appState = 'EDIT_ID_TABLE'; render(); }
+                else if (k === 'esc') { appState = 'EDIT_ID_TABLE'; render(); }
+            } else if (appState === 'UNIT_EDIT_MAIN') {
+                if (k >= '1' && k <= '6') {
+                    selUnit = k;
+                    render();
+                } else if (k === 'esc') {
+                    appState = 'EDIT_ID_TABLE';
+                    render();
+                }
+            } else if (appState === 'LCU_INFO_VIEW') {
+                if (k === 'esc') { appState = 'OP_MENU'; render(); }
+            } else if (appState === 'SET_ALLKEY_MENU') {
+                if (k === 'up' || k === 'down') { allKeyIdx = allKeyIdx === 0 ? 1 : 0; render(); }
+                if (k === 'enter') {
+                    if (allKeyIdx === 0) { allKeyLock = !allKeyLock; }
+                    else if (allKeyIdx === 1) { allKeyMap = allKeyMap === 'BOTH' ? 'ENT' : (allKeyMap === 'ENT' ? '0' : 'BOTH'); }
+                    render();
+                }
+                if (k === 'esc') { appState = 'OP_MENU'; render(); }
+            } else if (allControlStateCheck(k)) {
+                // Check and delegate logic
+            }
+        };
+
+        // Fallback checks
+        const allControlStateCheck = (k) => {
+            if (appState === 'ALL_CONTROL_SELECT') {
+                if (k === 'up' || k === 'down') actionIdx = actionIdx === 0 ? 1 : 0;
+                if (k === '1') { actionIdx = 0; render(); }
+                if (k === '2') { actionIdx = 1; render(); }
+                if (k === 'enter') {
+                    const targetState = actionIdx === 0 ? 'ON' : 'OFF';
+                    recoveryTargetName = `ALL LCU ${targetState}`;
+                    appState = 'RECOVERY_PROGRESS'; render();
+                    setTimeout(() => {
+                        const mockIds = ['001', '002', '012', '020', '030'];
+                        mockIds.forEach(id => { for(let ch=1; ch<=6; ch++) { lcuStates[`${id}-${ch}`] = targetState; } });
+                        appState = 'DEPT_RECOVERY_SUCCESS'; render();
+                        setTimeout(() => { appState = 'OP_MENU'; render(); }, 1200);
+                    }, 1500);
+                }
+                if (k === 'esc') { appState = 'OP_MENU'; render(); }
+                render(); return true;
+            } else if (appState === 'IND_LCU_INPUT') {
+                if (k >= '0' && k <= '9' && inputBuf.length < 3) { inputBuf += k; render(); }
+                if (k === 'enter' && inputBuf.length > 0) { selLcu = inputBuf.padStart(3, '0'); appState = 'IND_CH_INPUT'; inputBuf = ''; render(); }
+                if (k === 'esc') { appState = 'OP_MENU'; render(); }
+                return true;
+            } else if (appState === 'IND_CH_INPUT') {
+                if (k >= '1' && k <= '6' && inputBuf.length < 1) { inputBuf += k; render(); }
+                if (k === 'enter' && inputBuf.length > 0) { selUnit = inputBuf; appState = 'IND_CONTROL'; actionIdx = 0; render(); }
+                if (k === 'esc') { inputBuf = ''; appState = 'IND_LCU_INPUT'; render(); }
+                return true;
+            } else if (appState === 'IND_CONTROL') {
+                if (k === 'up' || k === 'down') actionIdx = actionIdx === 0 ? 1 : 0;
+                if (k === '1') { actionIdx = 0; render(); }
+                if (k === '2') { actionIdx = 1; render(); }
+                if (k === 'enter') {
+                    const targetState = actionIdx === 0 ? 'ON' : 'OFF';
+                    recoveryTargetName = `LCU:${selLcu} CH:${selUnit} ${targetState}`;
+                    appState = 'RECOVERY_PROGRESS'; render();
+                    setTimeout(() => { 
+                        lcuStates[`${selLcu}-${selUnit}`] = targetState; 
+                        appState = 'DEPT_RECOVERY_SUCCESS'; render();
+                        setTimeout(() => { appState = 'OP_MENU'; render(); }, 1200);
+                    }, 1500);
+                }
+                if (k === 'esc') { inputBuf = ''; appState = 'IND_CH_INPUT'; render(); }
+                render(); return true;
+            } else if (appState === 'SHOW_DATA_INPUT') {
+                if (k >= '0' && k <= '9' && inputBuf.length < 3) { inputBuf += k; render(); }
+                if (k === 'enter' && inputBuf.length > 0) { selLcu = inputBuf.padStart(3, '0'); selUnit = '1'; appState = 'SHOW_DATA_VIEW'; render(); }
+                if (k === 'esc') { appState = 'OP_MENU'; render(); }
+                return true;
+            } else if (appState === 'SHOW_DATA_VIEW') {
+                if (k === 'up') { selUnit = String(selUnit === '1' ? 6 : parseInt(selUnit) - 1); render(); }
+                if (k === 'down') { selUnit = String(selUnit === '6' ? 1 : parseInt(selUnit) + 1); render(); }
+                if (k === 'esc') { appState = 'OP_MENU'; render(); }
+                return true;
+            }
+            return false;
+        };
+
+        const wake = () => {
+            isLit = true; 
+            document.getElementById('lcd-screen').classList.remove('backlight-off');
+            clearTimeout(litTimer); 
+            clearInterval(countdownInterval);
+            secondsRemaining = maxBacklightSeconds;
+            updateTimerUi();
+            
+            litTimer = setTimeout(() => { 
+                isLit = false; 
+                document.getElementById('lcd-screen').classList.add('backlight-off'); 
+                updateTimerUi();
+                clearInterval(countdownInterval);
+            }, maxBacklightSeconds * 1000);
+
+            countdownInterval = setInterval(() => {
+                if (secondsRemaining > 0 && isLit) {
+                    secondsRemaining--;
+                    updateTimerUi();
+                }
+            }, 1000);
+        };
+
+        // Debugger Assist: Force instant dark state for visual inspection
+        const instantSleep = () => {
+            isLit = false;
+            clearInterval(countdownInterval);
+            document.getElementById('lcd-screen').classList.add('backlight-off');
+            updateTimerUi();
+        };
+
+        const changeBacklight = (color) => {
+            const lcd = document.getElementById('lcd-screen');
+            if (lcd) {
+                lcd.classList.remove('backlight-blue', 'backlight-white', 'backlight-green', 'backlight-amber');
+                lcd.classList.add(`backlight-${color}`);
+                wake(); 
+            }
+        };
+
+        window.onload = () => { lcuStates['001-6'] = 'OFF'; render(); wake(); };
+    </script>
+</body>
+</html>
